@@ -78,6 +78,34 @@ func (r *NetworkDeviceClaimResource) Schema(ctx context.Context, req resource.Sc
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"details_by_device": schema.ListNestedAttribute{
+				MarkdownDescription: helpers.NewAttributeDescription("Optional details for claimed devices (currently only used for Catalyst devices)").String,
+				Optional:            true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"serial": schema.StringAttribute{
+							MarkdownDescription: helpers.NewAttributeDescription("The serial of the device these details relate to").String,
+							Required:            true,
+						},
+						"details": schema.ListNestedAttribute{
+							MarkdownDescription: helpers.NewAttributeDescription("An array of details").String,
+							Required:            true,
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"name": schema.StringAttribute{
+										MarkdownDescription: helpers.NewAttributeDescription("Name of device detail").String,
+										Required:            true,
+									},
+									"value": schema.StringAttribute{
+										MarkdownDescription: helpers.NewAttributeDescription("Value of device detail").String,
+										Optional:            true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			"serials": schema.SetAttribute{
 				MarkdownDescription: helpers.NewAttributeDescription("A list of serials of devices to claim").String,
 				ElementType:         types.StringType,
