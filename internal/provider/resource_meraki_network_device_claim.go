@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/CiscoDevNet/terraform-provider-meraki/internal/provider/helpers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -126,8 +127,6 @@ func (r *NetworkDeviceClaimResource) Configure(_ context.Context, req resource.C
 
 // End of section. //template:end model
 
-// Section below is generated&owned by "gen/generator.go". //template:begin create
-
 func (r *NetworkDeviceClaimResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan NetworkDeviceClaim
 
@@ -139,25 +138,113 @@ func (r *NetworkDeviceClaimResource) Create(ctx context.Context, req resource.Cr
 
 	tflog.Debug(ctx, fmt.Sprintf("%s: Beginning Create", plan.Id.ValueString()))
 
-	// Create object
-	body := plan.toBody(ctx, NetworkDeviceClaim{})
-	res, err := r.client.Post(plan.getPath(), body)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Failed to configure object (POST/PUT), got error: %s, %s", err, res.String()))
-		return
-	}
 	plan.Id = plan.NetworkId
-	plan.fromBodyUnknowns(ctx, res)
+
+	// TODO Make the batch size configurable.
+	batches := splitClaimIntoBatches(ctx, plan, 10)
+	var claimed NetworkDeviceClaim
+
+	for i, batch := range batches {
+		// TODO Ensure the loop body takes at least 5 minutes?
+		res, err := r.ClaimBatch(ctx, batch)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Client Error",
+				fmt.Sprintf(
+					"Failed to claim devices into network (batch %v of %v: %v), got error: %s, %s",
+					i+1, len(batches), batch.Serials.String(), err, res.String(),
+				),
+			)
+			return
+		}
+
+		batch.fromBodyUnknowns(ctx, res)
+
+		claimed = appendClaim(ctx, claimed, batch)
+		diags := resp.State.Set(ctx, &claimed)
+		resp.Diagnostics.Append(diags...)
+	}
 
 	tflog.Debug(ctx, fmt.Sprintf("%s: Create finished successfully", plan.Id.ValueString()))
-
-	diags = resp.State.Set(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
 
 	helpers.SetFlagImporting(ctx, false, resp.Private, &resp.Diagnostics)
 }
 
-// End of section. //template:end create
+func splitClaimIntoBatches(ctx context.Context, plan NetworkDeviceClaim, batchSize int) []NetworkDeviceClaim {
+	var allSerials []string
+	// TODO Handle error?
+	_ = plan.Serials.ElementsAs(ctx, allSerials, true)
+
+	var batches []NetworkDeviceClaim
+	detailsBySerial := map[string]NetworkDeviceClaimDetailsByDevice{}
+	for _, deviceDetails := range plan.DetailsByDevice {
+		detailsBySerial[deviceDetails.Serial.ValueString()] = deviceDetails
+	}
+
+	for i := 0; i < len(allSerials); i += batchSize {
+		batch := NetworkDeviceClaim{
+			Id:        plan.Id,
+			NetworkId: plan.NetworkId,
+		}
+		batchSerials := allSerials[i : i+batchSize]
+		// TODO Handle error.
+		v := make([]attr.Value, len(batchSerials))
+		for r := range batchSerials {
+			v[r] = types.StringValue(batchSerials[r])
+		}
+		batch.Serials = types.SetValueMust(types.StringType, v)
+		for _, serial := range batchSerials {
+			if details, ok := detailsBySerial[serial]; ok {
+				batch.DetailsByDevice = append(batch.DetailsByDevice, details)
+			}
+		}
+	}
+
+	return batches
+}
+
+func appendClaim(ctx context.Context, plan, planToAppend NetworkDeviceClaim) NetworkDeviceClaim {
+	var serials []string
+	// TODO Handle error?
+	_ = plan.Serials.ElementsAs(ctx, serials, true)
+
+	var serialsToAppend []string
+	// TODO Handle error?
+	_ = planToAppend.Serials.ElementsAs(ctx, serialsToAppend, true)
+
+	serials = append(serials, serialsToAppend...)
+	v := make([]attr.Value, len(serials))
+	for r := range serials {
+		v[r] = types.StringValue(serials[r])
+	}
+	plan.Serials = types.SetValueMust(types.StringType, v)
+	plan.DetailsByDevice = append(plan.DetailsByDevice, planToAppend.DetailsByDevice...)
+	return plan
+}
+
+// ClaimBatch sends a single claim requqest, retrying if the limit of devices claimed in a time period is reached.
+func (r *NetworkDeviceClaimResource) ClaimBatch(ctx context.Context, plan NetworkDeviceClaim) (meraki.Res, error) {
+	// TODO Make configurable
+	maxTotalRetryTime, _ := time.ParseDuration("6m")
+	retryTime, _ := time.ParseDuration("30s")
+	retryEndTime := time.Now().Add(maxTotalRetryTime)
+
+	path := plan.getPath()
+	body := plan.toBody(ctx, NetworkDeviceClaim{})
+	var res meraki.Res
+	var err error
+	for time.Now().Before(retryEndTime) {
+		// TODO log attempt
+		res, err = r.client.Post(path, body)
+		if err != nil && strings.Contains(res.String(), "Timeout reached. Please try again with fewer devices or contact support") {
+			// TODO log
+			time.Sleep(retryTime)
+			continue
+		}
+		return res, err
+	}
+	return res, err
+}
 
 func (r *NetworkDeviceClaimResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state NetworkDeviceClaim
