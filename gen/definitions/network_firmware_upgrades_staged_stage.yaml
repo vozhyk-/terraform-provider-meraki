@@ -1,0 +1,33 @@
+name: Network Firmware Upgrades Staged Stage
+spec_endpoint: /networks/{networkId}/firmwareUpgrades/staged/stages
+rest_endpoint: /networks/%v/firmwareUpgrades/staged/stages
+put_create: true
+no_delete: true
+doc_category: Networks
+test_variables: [test_org, test_network]
+attributes:
+  - tf_name: network_id
+    type: String
+    id: true
+    reference: true
+    description: Network ID
+    example: L_123456
+    test_value: meraki_network.test.id
+  - model_name: _json
+    type: List
+    description: Array of Staged Upgrade Groups
+    attributes:
+      - model_name: id
+        type: String
+        data_path: [group]
+        description: ID of the Staged Upgrade Group
+        example: "1234"
+test_prerequisites: |2
+  data "meraki_organization" "test" {
+    name = var.test_org
+  }
+  resource "meraki_network" "test" {
+    organization_id = data.meraki_organization.test.id
+    name            = var.test_network
+    product_types   = ["switch", "wireless", "appliance", "sensor", "camera"]
+  }

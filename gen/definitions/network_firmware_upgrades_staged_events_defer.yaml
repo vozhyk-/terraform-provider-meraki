@@ -1,0 +1,27 @@
+name: Network Firmware Upgrades Staged Events Defer
+spec_endpoint: /networks/{networkId}/firmwareUpgrades/staged/events/defer
+rest_endpoint: /networks/%v/firmwareUpgrades/staged/events/defer
+no_data_source: true
+no_update: true
+no_delete: true
+no_import: true
+no_read: true
+doc_category: Networks
+test_variables: [test_org, test_network]
+attributes:
+  - tf_name: network_id
+    type: String
+    id: true
+    reference: true
+    description: Network ID
+    example: L_123456
+    test_value: meraki_network.test.id
+test_prerequisites: |2
+  data "meraki_organization" "test" {
+    name = var.test_org
+  }
+  resource "meraki_network" "test" {
+    organization_id = data.meraki_organization.test.id
+    name            = var.test_network
+    product_types   = ["switch", "wireless", "appliance", "sensor", "camera"]
+  }

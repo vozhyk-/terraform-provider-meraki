@@ -1,0 +1,48 @@
+name: Network Firmware Upgrades Staged Event
+spec_endpoint: /networks/{networkId}/firmwareUpgrades/staged/events
+rest_endpoint: /networks/%v/firmwareUpgrades/staged/events
+no_delete: true
+doc_category: Networks
+test_variables: [test_org, test_network]
+attributes:
+  - tf_name: network_id
+    type: String
+    id: true
+    reference: true
+    description: Network ID
+    example: L_123456
+    test_value: meraki_network.test.id
+  - model_name: id
+    type: String
+    data_path: [products, switch, nextUpgrade, toVersion]
+    description: The version ID
+    example: "1234"
+  - model_name: id
+    type: String
+    data_path: [products, switchCatalyst, nextUpgrade, toVersion]
+    description: The version ID
+    example: "4321"
+  - model_name: stages
+    type: List
+    mandatory: true
+    description: All firmware upgrade stages in the network with their start time.
+    attributes:
+      - model_name: id
+        type: String
+        data_path: [group]
+        description: ID of the Staged Upgrade Group
+        example: "1234"
+      - model_name: scheduledFor
+        type: String
+        data_path: [milestones]
+        description: The start time of the staged upgrade stage. (In ISO-8601 format, in the time zone of the network.)
+        example: "2018-02-11T00:00:00Z"
+test_prerequisites: |2
+  data "meraki_organization" "test" {
+    name = var.test_org
+  }
+  resource "meraki_network" "test" {
+    organization_id = data.meraki_organization.test.id
+    name            = var.test_network
+    product_types   = ["switch", "wireless", "appliance", "sensor", "camera"]
+  }

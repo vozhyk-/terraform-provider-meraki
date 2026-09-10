@@ -1,0 +1,67 @@
+name: Network Firmware Upgrades Staged Group
+spec_endpoint: /networks/{networkId}/firmwareUpgrades/staged/groups
+rest_endpoint: /networks/%v/firmwareUpgrades/staged/groups
+no_update: true
+no_delete: true
+data_source_name_query: true
+doc_category: Networks
+test_variables: [test_org, test_network]
+attributes:
+  - tf_name: network_id
+    type: String
+    id: true
+    reference: true
+    description: Network ID
+    example: L_123456
+    test_value: meraki_network.test.id
+  - model_name: description
+    type: String
+    description: Description of the Staged Upgrade Group. Length must be 1 to 255 characters
+    example: The description of the group
+  - model_name: isDefault
+    type: Bool
+    mandatory: true
+    description: Boolean indicating the default Group. Any device that does not have a group explicitly assigned will upgrade with this group
+    example: "false"
+  - model_name: name
+    type: String
+    mandatory: true
+    description: Name of the Staged Upgrade Group. Length must be 1 to 255 characters
+    example: My Staged Upgrade Group
+  - model_name: devices
+    type: List
+    data_path: [assignedDevices]
+    description: Data Array of Devices containing the name and serial
+    attributes:
+      - model_name: name
+        type: String
+        description: Name of the device
+        example: Device Name
+      - model_name: serial
+        type: String
+        mandatory: true
+        description: Serial of the device
+        example: Q234-ABCD-5678
+  - model_name: switchStacks
+    type: List
+    data_path: [assignedDevices]
+    description: Data Array of Switch Stacks containing the name and id
+    attributes:
+      - model_name: id
+        type: String
+        mandatory: true
+        description: ID of the Switch Stack
+        example: "1234"
+      - model_name: name
+        type: String
+        description: Name of the Switch Stack
+        example: Stack Name
+test_prerequisites: |2
+  data "meraki_organization" "test" {
+    name = var.test_org
+  }
+  resource "meraki_network" "test" {
+    organization_id = data.meraki_organization.test.id
+    name            = var.test_network
+    product_types   = ["switch", "wireless", "appliance", "sensor", "camera"]
+  }
